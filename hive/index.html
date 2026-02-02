@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLTCH Hive — Distributed Training Network</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <span class="logo-icon">⬡</span>
+                <h1>GLTCH<span class="logo-sub">HIVE</span></h1>
+            </div>
+            <div class="status">
+                <div class="status-dot"></div>
+                <span id="connection-status">Connecting...</span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main">
+            <!-- Hive Visualization -->
+            <div class="hive-container">
+                <canvas id="hive-canvas"></canvas>
+                <div class="hive-overlay">
+                    <div class="center-node">
+                        <div class="center-hex">⬡</div>
+                        <div class="center-label">COORDINATOR</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats Panel -->
+            <div class="stats-panel">
+                <h2>Network Stats</h2>
+                
+                <div class="stat-card">
+                    <div class="stat-icon">👥</div>
+                    <div class="stat-info">
+                        <div class="stat-value" id="peer-count">0</div>
+                        <div class="stat-label">Active Peers</div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">📉</div>
+                    <div class="stat-info">
+                        <div class="stat-value" id="current-loss">—</div>
+                        <div class="stat-label">Current Loss</div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">⚡</div>
+                    <div class="stat-info">
+                        <div class="stat-value" id="total-tflops">0</div>
+                        <div class="stat-label">Total TFLOPS</div>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon">🔄</div>
+                    <div class="stat-info">
+                        <div class="stat-value" id="training-step">0</div>
+                        <div class="stat-label">Training Step</div>
+                    </div>
+                </div>
+
+                <!-- Loss Chart -->
+                <div class="chart-container">
+                    <h3>Training Progress</h3>
+                    <canvas id="loss-chart"></canvas>
+                </div>
+
+                <!-- Peer List -->
+                <div class="peer-list">
+                    <h3>Connected Peers</h3>
+                    <div id="peer-list-container">
+                        <div class="no-peers">Waiting for peers to connect...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div>GLTCH — Generative Language Transformer with Contextual Hierarchy</div>
+            <div>Created by <span class="creator">cyberdreadx</span></div>
+        </footer>
+    </div>
+
+    <script src="hive.js"></script>
+</body>
+</html>
