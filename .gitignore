@@ -11,6 +11,12 @@ dist/
 
 # Virtual environments
 venv/
+venv_cuda/
+env/
+.env
+
+# Virtual environments
+venv/
 env/
 .env
 
