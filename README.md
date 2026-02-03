@@ -24,7 +24,7 @@ A 2.7 million parameter language model built from scratch, with distributed trai
 
 ## Quick Start
 
-### Train Locally (Single GPU)
+### Train with Dashboard UI (Recommended)
 
 ```bash
 # Clone the repo
@@ -34,7 +34,19 @@ cd gltch-2.7m
 # Install dependencies
 pip install torch requests
 
-# Train the model
+# Train with live dashboard
+python train_with_ui.py
+```
+
+This opens a browser dashboard showing:
+- 📉 Real-time loss curve
+- ⚡ Training speed (tokens/sec)
+- ⏱️ ETA countdown
+- ✨ Generated text samples
+
+### Train in Terminal (No UI)
+
+```bash
 python gltch_2_7m.py
 ```
 
@@ -46,6 +58,24 @@ python gltch_2_7m.py
 4. Run each cell in order
 
 Training takes ~5 minutes on a T4 GPU.
+
+### Train on Custom Data
+
+Train GLTCH on your own text data:
+
+```bash
+# Train on a text file
+python train_custom.py --data your_novel.txt
+
+# Train on a folder of files
+python train_custom.py --data ./my_dataset/
+
+# Train on a URL
+python train_custom.py --data https://example.com/text.txt
+
+# More training steps
+python train_custom.py --data data.txt --steps 10000
+```
 
 ## GLTCH Hive — Distributed Training
 
@@ -94,8 +124,10 @@ GLTCH-2.7M
 
 ```
 gltch-2.7m/
-├── gltch_2_7m.py          # Main model (single file)
+├── gltch_2_7m.py          # Main model (terminal only)
 ├── gltch_2_7m_colab.py    # Colab version with cells
+├── train_with_ui.py       # Training with web dashboard
+├── train_custom.py        # Train on custom data
 ├── README.md
 ├── LICENSE
 └── hive/                  # Distributed training
