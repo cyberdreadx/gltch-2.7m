@@ -201,23 +201,63 @@ class GLTCH(nn.Module):
         return idx
 
 
-def train_model():
-    """Main training function that updates global state"""
+def train_model(data_path=None, resume_path=None, checkpoint_interval=500):
+    """Main training function that updates global state
+    
+    Args:
+        data_path: Path to custom training data file (.txt), or None for Shakespeare
+        resume_path: Path to checkpoint file to resume from, or None for fresh start
+        checkpoint_interval: Save checkpoint every N steps
+    """
     global training_state
     
     training_state["status"] = "Loading data..."
     training_state["running"] = True
     
-    # Load data
-    url = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
-    text = requests.get(url).text
+    # Load vocabulary and data from checkpoint if resuming
+    start_step = 0
+    stoi = None
+    itos = None
+    model_state = None
+    optimizer_state = None
     
-    chars = sorted(list(set(text)))
-    vocab_size = len(chars)
-    stoi = {ch: i for i, ch in enumerate(chars)}
-    itos = {i: ch for i, ch in enumerate(chars)}
-    encode = lambda s: [stoi[c] for c in s]
-    decode = lambda l: ''.join([itos[i] for i in l])
+    if resume_path:
+        training_state["status"] = "Loading checkpoint..."
+        checkpoint = torch.load(resume_path, map_location=config['device'], weights_only=False)
+        stoi = checkpoint.get('stoi')
+        itos = checkpoint.get('itos')
+        start_step = checkpoint.get('step', 0)
+        model_state = checkpoint.get('model_state_dict')
+        optimizer_state = checkpoint.get('optimizer_state_dict')
+        training_state["loss_history"] = checkpoint.get('loss_history', [])
+        print(f"📂 Resuming from checkpoint at step {start_step}")
+    
+    # Load training data
+    if data_path:
+        # Load from custom file
+        print(f"📥 Loading training data from {data_path}...")
+        with open(data_path, 'r', encoding='utf-8') as f:
+            text = f.read()
+        print(f"   Loaded {len(text):,} characters from file")
+    else:
+        # Default: download Shakespeare
+        print("📥 Loading training data...")
+        url = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
+        text = requests.get(url).text
+    
+    # Build vocabulary (use checkpoint vocab if resuming, else build fresh)
+    if stoi is None or itos is None:
+        chars = sorted(list(set(text)))
+        vocab_size = len(chars)
+        stoi = {ch: i for i, ch in enumerate(chars)}
+        itos = {i: ch for i, ch in enumerate(chars)}
+    else:
+        vocab_size = len(stoi)
+    
+    encode = lambda s: [stoi.get(c, 0) for c in s]
+    decode = lambda l: ''.join([itos.get(i, '?') for i in l])
+    
+    print(f"   Vocab size: {vocab_size}")
     
     data = torch.tensor(encode(text), dtype=torch.long)
     n = int(0.9 * len(data))
@@ -235,13 +275,24 @@ def train_model():
     model = GLTCH(vocab_size).to(config['device'])
     optimizer = torch.optim.AdamW(model.parameters(), lr=config['learning_rate'])
     
+    # Load model/optimizer state if resuming
+    if model_state:
+        model.load_state_dict(model_state)
+        print("   Loaded model weights from checkpoint")
+    if optimizer_state:
+        optimizer.load_state_dict(optimizer_state)
+        print("   Loaded optimizer state from checkpoint")
+    
     training_state["status"] = "Training..."
     training_state["max_steps"] = config['max_iters']
     
     start_time = time.time()
     tokens_processed = 0
     
-    for step in range(config['max_iters']):
+    # Generate sample prompt based on data
+    sample_prompt = text[:20].split('\n')[0][:10] if text else "Hello"
+    
+    for step in range(start_step, config['max_iters']):
         if not training_state["running"]:
             break
         
@@ -260,7 +311,7 @@ def train_model():
         training_state["step"] = step + 1
         training_state["loss"] = loss.item()
         training_state["tokens_per_sec"] = int(tokens_processed / elapsed)
-        training_state["eta_seconds"] = int((config['max_iters'] - step) * (elapsed / (step + 1)))
+        training_state["eta_seconds"] = int((config['max_iters'] - step) * (elapsed / (step - start_step + 1)))
         
         # Record loss history
         if step % 10 == 0:
@@ -272,11 +323,24 @@ def train_model():
             if len(training_state["loss_history"]) > 300:
                 training_state["loss_history"] = training_state["loss_history"][-300:]
         
+        # Save checkpoint
+        if checkpoint_interval > 0 and step > 0 and step % checkpoint_interval == 0:
+            checkpoint_filename = config['name'].lower().replace('-', '_') + f'_checkpoint.pt'
+            torch.save({
+                'step': step,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss_history': training_state["loss_history"],
+                'config': config,
+                'stoi': stoi,
+                'itos': itos,
+            }, checkpoint_filename)
+            print(f"💾 Checkpoint saved: {checkpoint_filename} (step {step})")
+        
         # Generate sample
         if step % config['sample_interval'] == 0 and step > 0:
             model.eval()
-            prompt = "ROMEO:"
-            context = torch.tensor([encode(prompt)], dtype=torch.long, device=config['device'])
+            context = torch.tensor([encode(sample_prompt)], dtype=torch.long, device=config['device'])
             generated = model.generate(context, max_new_tokens=150)
             training_state["current_sample"] = decode(generated[0].tolist())
             model.train()
@@ -286,14 +350,19 @@ def train_model():
     
     # Final generation
     model.eval()
-    prompt = "ROMEO:"
-    context = torch.tensor([encode(prompt)], dtype=torch.long, device=config['device'])
+    context = torch.tensor([encode(sample_prompt)], dtype=torch.long, device=config['device'])
     generated = model.generate(context, max_new_tokens=300)
     training_state["current_sample"] = decode(generated[0].tolist())
     
-    # Save model
+    # Save final model with vocabulary
     model_filename = config['name'].lower().replace('-', '_') + '.pt'
-    torch.save(model.state_dict(), model_filename)
+    torch.save({
+        'model_state_dict': model.state_dict(),
+        'config': config,
+        'stoi': stoi,
+        'itos': itos,
+        'vocab_size': vocab_size,
+    }, model_filename)
     training_state["status"] = f"Complete! Model saved to {model_filename}"
 
 
@@ -646,6 +715,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="GLTCH Training Dashboard")
     parser.add_argument("--size", choices=['2.7m', '10m', '25m', '50m'], default='2.7m',
                         help="Model size to train (default: 2.7m)")
+    parser.add_argument("--data", type=str, default=None,
+                        help="Path to custom training data file (.txt)")
+    parser.add_argument("--resume", type=str, default=None,
+                        help="Path to checkpoint file to resume training from")
+    parser.add_argument("--checkpoint-interval", type=int, default=500,
+                        help="Save checkpoint every N steps (default: 500)")
     args = parser.parse_args()
     
     # Set config based on size
@@ -670,6 +745,11 @@ if __name__ == "__main__":
     print(f"📐 Config: {config['n_layer']} layers, {config['n_head']} heads, {config['n_embd']} dim")
     print(f"📦 Batch: {config['batch_size']}, Context: {config['block_size']}")
     print(f"🚀 Device: {config['device']}")
+    if args.data:
+        print(f"📄 Data: {args.data}")
+    if args.resume:
+        print(f"📂 Resume: {args.resume}")
+    print(f"💾 Checkpoint interval: every {args.checkpoint_interval} steps")
     print(f"🌐 Dashboard: http://localhost:8888")
     print("-" * 50)
     
@@ -680,9 +760,12 @@ if __name__ == "__main__":
     # Open browser
     webbrowser.open("http://localhost:8888")
     
-    # Start training
     try:
-        train_model()
+        train_model(
+            data_path=args.data,
+            resume_path=args.resume,
+            checkpoint_interval=args.checkpoint_interval
+        )
     except KeyboardInterrupt:
         print("\n👋 Training stopped by user")
         training_state["running"] = False

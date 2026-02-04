@@ -31,6 +31,18 @@ except ImportError:
     print("❌ websockets not installed. Run: pip install websockets")
     exit(1)
 
+try:
+    import requests
+except ImportError:
+    print("❌ requests not installed. Run: pip install requests")
+    exit(1)
+
+try:
+    import torch
+    HAS_TORCH = True
+except ImportError:
+    HAS_TORCH = False
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("GLTCH-Hive")
 
@@ -68,7 +80,8 @@ class TrainingState:
 # ============================================
 
 class HiveServer:
-    def __init__(self, host="0.0.0.0", ws_port=8765, http_port=8080, secret_key=None):
+    def __init__(self, host="0.0.0.0", ws_port=8765, http_port=8080, secret_key=None,
+                 data_path=None, resume_path=None, checkpoint_interval=500):
         self.host = host
         self.ws_port = ws_port
         self.http_port = http_port
@@ -76,12 +89,73 @@ class HiveServer:
         self.dashboard_clients: Set = set()
         self.training = TrainingState()
         self.peer_counter = 0
+        self.data_path = data_path
+        self.checkpoint_interval = checkpoint_interval
+        
+        # Vocabulary for distributed training
+        self.stoi = None
+        self.itos = None
+        self.vocab_size = 0
+        self.text = None
         
         # Authentication
         if secret_key:
             self.secret_key = secret_key
         else:
             self.secret_key = secrets.token_urlsafe(16)
+        
+        # Load data and build vocabulary
+        self._load_data()
+        
+        # Load checkpoint if resuming
+        if resume_path:
+            self._load_checkpoint(resume_path)
+    
+    def _load_data(self):
+        """Load training data and build vocabulary"""
+        if self.data_path:
+            print(f"📥 Loading training data from {self.data_path}...")
+            with open(self.data_path, 'r', encoding='utf-8') as f:
+                self.text = f.read()
+        else:
+            print("📥 Loading default Shakespeare data...")
+            url = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
+            self.text = requests.get(url).text
+        
+        chars = sorted(list(set(self.text)))
+        self.vocab_size = len(chars)
+        self.stoi = {ch: i for i, ch in enumerate(chars)}
+        self.itos = {i: ch for i, ch in enumerate(chars)}
+        print(f"   Loaded {len(self.text):,} characters, vocab size: {self.vocab_size}")
+    
+    def _load_checkpoint(self, path):
+        """Load training state from checkpoint"""
+        if not HAS_TORCH:
+            print("⚠️  PyTorch not installed, cannot load checkpoint")
+            return
+        print(f"📂 Loading checkpoint from {path}...")
+        checkpoint = torch.load(path, map_location='cpu', weights_only=False)
+        self.training.step = checkpoint.get('step', 0)
+        self.training.loss = checkpoint.get('loss', 4.5)
+        if 'stoi' in checkpoint:
+            self.stoi = checkpoint['stoi']
+            self.itos = checkpoint['itos']
+            self.vocab_size = len(self.stoi)
+        print(f"   Resumed at step {self.training.step}")
+    
+    def _save_checkpoint(self):
+        """Save current training state to checkpoint"""
+        if not HAS_TORCH:
+            return
+        checkpoint_path = 'hive_checkpoint.pt'
+        torch.save({
+            'step': self.training.step,
+            'loss': self.training.loss,
+            'stoi': self.stoi,
+            'itos': self.itos,
+            'vocab_size': self.vocab_size,
+        }, checkpoint_path)
+        print(f"💾 Checkpoint saved: {checkpoint_path} (step {self.training.step})")
         
     def verify_key(self, provided_key: str) -> bool:
         """Verify provided key matches server key"""
@@ -121,11 +195,16 @@ class HiveServer:
                 self.peers[peer_id] = peer
                 logger.info(f"🔗 Peer joined: {peer.name} ({peer.gpu})")
                 
-                # Send confirmation
+                # Send confirmation with vocabulary
                 await websocket.send(json.dumps({
                     "type": "registered",
                     "peer_id": peer_id,
-                    "training_step": self.training.step
+                    "training_step": self.training.step,
+                    "vocab": {
+                        "stoi": self.stoi,
+                        "itos": {str(k): v for k, v in self.itos.items()},  # JSON needs string keys
+                        "vocab_size": self.vocab_size
+                    }
                 }))
                 
                 # Notify dashboard
@@ -300,9 +379,22 @@ if __name__ == "__main__":
     parser.add_argument("--key", help="Secret key for authentication (auto-generated if not provided)")
     parser.add_argument("--ws-port", type=int, default=8765, help="WebSocket port")
     parser.add_argument("--http-port", type=int, default=8080, help="HTTP dashboard port")
+    parser.add_argument("--data", type=str, default=None,
+                        help="Path to custom training data file (.txt)")
+    parser.add_argument("--resume", type=str, default=None,
+                        help="Path to checkpoint file to resume training from")
+    parser.add_argument("--checkpoint-interval", type=int, default=500,
+                        help="Save checkpoint every N steps (default: 500)")
     args = parser.parse_args()
     
-    server = HiveServer(secret_key=args.key, ws_port=args.ws_port, http_port=args.http_port)
+    server = HiveServer(
+        secret_key=args.key,
+        ws_port=args.ws_port,
+        http_port=args.http_port,
+        data_path=args.data,
+        resume_path=args.resume,
+        checkpoint_interval=args.checkpoint_interval
+    )
     
     # Display secret key prominently
     print("\n" + "=" * 60)

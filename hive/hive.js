@@ -292,6 +292,9 @@ class HiveNetwork {
             this.ws.onopen = () => {
                 this.setConnectionStatus(true);
                 console.log('Connected to GLTCH Hive server');
+
+                // Register as dashboard client
+                this.ws.send(JSON.stringify({ type: 'dashboard' }));
             };
 
             this.ws.onmessage = (event) => {
@@ -327,6 +330,17 @@ class HiveNetwork {
 
     handleMessage(data) {
         switch (data.type) {
+            case 'initial_state':
+                // Load existing peers and training state when dashboard connects
+                if (data.peers) {
+                    data.peers.forEach(peer => this.addPeer(peer));
+                }
+                if (data.training) {
+                    this.stats.trainingStep = data.training.step || 0;
+                    this.stats.currentLoss = data.training.loss;
+                    this.updateStats();
+                }
+                break;
             case 'peer_joined':
                 this.addPeer(data.peer);
                 break;

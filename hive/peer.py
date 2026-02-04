@@ -233,28 +233,43 @@ class TrainingPeer:
         self.vocab_size = None
         self.encode = None
         self.decode = None
+        self.stoi = None
+        self.itos = None
         
         # Model will be initialized after data is loaded
         self.model = None
         self.optimizer = None
     
-    def load_data(self):
-        """Load Shakespeare training data"""
-        print("📥 Loading training data...")
-        url = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
-        text = requests.get(url).text
+    def load_data(self, stoi=None, itos=None):
+        """Load training data. Uses server-provided vocab if available."""
+        if stoi and itos:
+            # Use vocabulary from server
+            print("📥 Using vocabulary from server...")
+            self.vocab_size = len(stoi)
+            # itos keys are strings in JSON, convert to int
+            itos_int = {int(k): v for k, v in itos.items()}
+            self.encode = lambda s: [stoi.get(c, 0) for c in s]
+            self.decode = lambda l: ''.join([itos_int.get(i, '?') for i in l])
+            self.stoi = stoi
+            self.itos = itos_int
+        else:
+            # Fallback: load Shakespeare locally
+            print("📥 Loading training data...")
+            url = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
+            text = requests.get(url).text
+            
+            chars = sorted(list(set(text)))
+            self.vocab_size = len(chars)
+            self.stoi = {ch: i for i, ch in enumerate(chars)}
+            self.itos = {i: ch for i, ch in enumerate(chars)}
+            self.encode = lambda s: [self.stoi.get(c, 0) for c in s]
+            self.decode = lambda l: ''.join([self.itos.get(i, '?') for i in l])
+            
+            data = torch.tensor(self.encode(text), dtype=torch.long)
+            n = int(0.9 * len(data))
+            self.train_data = data[:n]
         
-        chars = sorted(list(set(text)))
-        self.vocab_size = len(chars)
-        stoi = {ch: i for i, ch in enumerate(chars)}
-        itos = {i: ch for i, ch in enumerate(chars)}
-        self.encode = lambda s: [stoi.get(c, 0) for c in s]
-        self.decode = lambda l: ''.join([itos.get(i, '?') for i in l])
-        
-        data = torch.tensor(self.encode(text), dtype=torch.long)
-        n = int(0.9 * len(data))
-        self.train_data = data[:n]
-        print(f"   Loaded {len(text):,} characters, vocab size: {self.vocab_size}")
+        print(f"   Vocab size: {self.vocab_size}")
     
     def init_model(self):
         """Initialize model and optimizer"""
@@ -287,11 +302,6 @@ class TrainingPeer:
         print(f"🔗 Server: {self.server_url}")
         print("-" * 50)
         
-        # Load data and init model
-        self.load_data()
-        self.init_model()
-        print("-" * 50)
-        
         try:
             self.ws = await websockets.connect(self.server_url)
             
@@ -315,6 +325,17 @@ class TrainingPeer:
             if data["type"] == "registered":
                 self.peer_id = data["peer_id"]
                 self.step = data.get("training_step", 0)
+                
+                # Get vocabulary from server if provided
+                vocab = data.get("vocab")
+                if vocab:
+                    self.load_data(stoi=vocab.get("stoi"), itos=vocab.get("itos"))
+                else:
+                    self.load_data()  # Fallback to local loading
+                
+                # Initialize model with correct vocab size
+                self.init_model()
+                
                 print(f"✅ Registered as: {self.peer_id}")
                 print(f"📊 Current training step: {self.step}")
                 print("-" * 50)
