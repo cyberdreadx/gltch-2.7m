@@ -1,0 +1,15 @@
+# Netlify/Vercel redirects for gltch.app
+# Deploy the website/ folder to your hosting provider
+
+# Quick join script
+/join    https://raw.githubusercontent.com/cyberdreadx/gltch-2.7m/main/hive/join.sh    200
+
+# Docs shortcut
+/docs    https://github.com/cyberdreadx/gltch-2.7m#readme    301
+
+# GitHub repo
+/github  https://github.com/cyberdreadx/gltch-2.7m    301
+/repo    https://github.com/cyberdreadx/gltch-2.7m    301
+
+# Hive docs
+/hive    https://github.com/cyberdreadx/gltch-2.7m#distributed-training-gltch-hive    301
