@@ -6,7 +6,8 @@ WebSocket server for distributed training coordination.
 Peers connect and send gradients, server aggregates and broadcasts.
 
 Usage:
-    python server.py
+    python server.py                     # Generate new secret key
+    python server.py --key YOUR_KEY      # Use custom key
 
 Created by: cyberdreadx
 """
@@ -20,6 +21,8 @@ from typing import Dict, Set
 import http.server
 import threading
 import os
+import secrets
+import argparse
 
 # Try to import websockets, provide install instructions if not found
 try:
@@ -65,7 +68,7 @@ class TrainingState:
 # ============================================
 
 class HiveServer:
-    def __init__(self, host="0.0.0.0", ws_port=8765, http_port=8080):
+    def __init__(self, host="0.0.0.0", ws_port=8765, http_port=8080, secret_key=None):
         self.host = host
         self.ws_port = ws_port
         self.http_port = http_port
@@ -73,6 +76,16 @@ class HiveServer:
         self.dashboard_clients: Set = set()
         self.training = TrainingState()
         self.peer_counter = 0
+        
+        # Authentication
+        if secret_key:
+            self.secret_key = secret_key
+        else:
+            self.secret_key = secrets.token_urlsafe(16)
+        
+    def verify_key(self, provided_key: str) -> bool:
+        """Verify provided key matches server key"""
+        return secrets.compare_digest(provided_key or "", self.secret_key)
     
     async def handle_peer(self, websocket, path):
         """Handle incoming peer connection"""
@@ -84,6 +97,16 @@ class HiveServer:
             data = json.loads(message)
             
             if data.get("type") == "register":
+                # Verify secret key
+                if not self.verify_key(data.get("key")):
+                    logger.warning(f"❌ Rejected connection: Invalid key from {data.get('name', 'unknown')}")
+                    await websocket.send(json.dumps({
+                        "type": "error",
+                        "message": "Invalid secret key. Connection rejected."
+                    }))
+                    await websocket.close()
+                    return
+                
                 self.peer_counter += 1
                 peer_id = f"peer-{self.peer_counter:04d}"
                 
@@ -116,6 +139,16 @@ class HiveServer:
                     await self.handle_peer_message(peer_id, message)
             
             elif data.get("type") == "dashboard":
+                # Verify secret key for dashboard too
+                if not self.verify_key(data.get("key")):
+                    logger.warning("❌ Rejected dashboard: Invalid key")
+                    await websocket.send(json.dumps({
+                        "type": "error",
+                        "message": "Invalid secret key."
+                    }))
+                    await websocket.close()
+                    return
+                    
                 # Dashboard client
                 self.dashboard_clients.add(websocket)
                 logger.info("📊 Dashboard connected")
@@ -273,9 +306,22 @@ class HiveServer:
 # ============================================
 
 if __name__ == "__main__":
-    server = HiveServer()
+    parser = argparse.ArgumentParser(description="GLTCH Hive Coordinator")
+    parser.add_argument("--key", help="Secret key for authentication (auto-generated if not provided)")
+    parser.add_argument("--ws-port", type=int, default=8765, help="WebSocket port")
+    parser.add_argument("--http-port", type=int, default=8080, help="HTTP dashboard port")
+    args = parser.parse_args()
+    
+    server = HiveServer(secret_key=args.key, ws_port=args.ws_port, http_port=args.http_port)
+    
+    # Display secret key prominently
+    print("\n" + "=" * 60)
+    print("🔐 SECRET KEY (share only with trusted peers):")
+    print(f"   {server.secret_key}")
+    print("=" * 60 + "\n")
     
     try:
         asyncio.run(server.run())
     except KeyboardInterrupt:
         logger.info("\n👋 Shutting down GLTCH Hive...")
+

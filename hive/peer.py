@@ -4,8 +4,8 @@ GLTCH HIVE — Training Peer
 Run this script to join the training hive and contribute GPU power.
 
 Usage:
-    python peer.py --server ws://YOUR_VPS:8765 --name office-4090
-    python peer.py --server ws://YOUR_VPS:8765 --name office-4090 --size 10m
+    python peer.py --server ws://YOUR_VPS:8765 --key SECRET --name my-gpu
+    python peer.py --server ws://YOUR_VPS:8765 --key SECRET --name my-gpu --size 10m
 
 Model Sizes:
     2.7m  - 2.7M params (default)
@@ -211,7 +211,7 @@ class GLTCH(nn.Module):
 # ============================================
 
 class TrainingPeer:
-    def __init__(self, server_url: str, name: str, size: str):
+    def __init__(self, server_url: str, name: str, size: str, secret_key: str):
         global config
         config = CONFIGS[size].copy()
         config['device'] = get_device()
@@ -219,6 +219,7 @@ class TrainingPeer:
         self.server_url = server_url
         self.name = name
         self.size = size
+        self.secret_key = secret_key
         self.gpu = get_gpu_info()
         self.device = get_device()
         self.peer_id = None
@@ -299,12 +300,17 @@ class TrainingPeer:
                 "type": "register",
                 "name": self.name,
                 "gpu": self.gpu,
-                "model_size": self.size
+                "model_size": self.size,
+                "key": self.secret_key
             }))
             
             # Wait for confirmation
             response = await self.ws.recv()
             data = json.loads(response)
+            
+            if data.get("type") == "error":
+                print(f"❌ {data.get('message', 'Connection rejected')}")
+                return False
             
             if data["type"] == "registered":
                 self.peer_id = data["peer_id"]
@@ -439,13 +445,14 @@ class TrainingPeer:
 def main():
     parser = argparse.ArgumentParser(description="GLTCH Hive Training Peer")
     parser.add_argument("--server", default="ws://localhost:8765", help="Server WebSocket URL")
+    parser.add_argument("--key", required=True, help="Secret key from coordinator")
     parser.add_argument("--name", default=f"node-{random.randint(1000, 9999)}", help="Peer name")
     parser.add_argument("--size", choices=['2.7m', '10m', '25m', '50m'], default='2.7m',
                         help="Model size to train (default: 2.7m)")
     
     args = parser.parse_args()
     
-    peer = TrainingPeer(args.server, args.name, args.size)
+    peer = TrainingPeer(args.server, args.name, args.size, args.key)
     asyncio.run(peer.run())
 
 
