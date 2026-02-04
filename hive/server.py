@@ -139,19 +139,9 @@ class HiveServer:
                     await self.handle_peer_message(peer_id, message)
             
             elif data.get("type") == "dashboard":
-                # Verify secret key for dashboard too
-                if not self.verify_key(data.get("key")):
-                    logger.warning("❌ Rejected dashboard: Invalid key")
-                    await websocket.send(json.dumps({
-                        "type": "error",
-                        "message": "Invalid secret key."
-                    }))
-                    await websocket.close()
-                    return
-                    
-                # Dashboard client
+                # Dashboard is public (read-only view)
                 self.dashboard_clients.add(websocket)
-                logger.info("📊 Dashboard connected")
+                logger.info("👁️  Viewer connected (public dashboard)")
                 
                 # Send current state
                 await websocket.send(json.dumps({
