@@ -30,7 +30,7 @@ Build and train your own language model from scratch. Supports multiple model si
 ### Option 1: Train with Dashboard (Recommended)
 
 ```bash
-git clone https://github.com/cyberdreadx/gltch-2.7m.git
+git clone https://github.com/cyberdreadx/gltch-llm.git
 cd gltch-2.7m
 pip install torch requests
 
@@ -150,13 +150,13 @@ Train across multiple machines using the Hive network.
 
 ```bash
 # SSH to your VPS
-curl -sSL https://raw.githubusercontent.com/cyberdreadx/gltch-2.7m/main/hive/setup_coordinator.sh | bash
+curl -sSL https://raw.githubusercontent.com/cyberdreadx/gltch-llm/main/hive/setup_coordinator.sh | bash
 ```
 
 Or manually:
 
 ```bash
-git clone https://github.com/cyberdreadx/gltch-2.7m.git
+git clone https://github.com/cyberdreadx/gltch-llm.git
 cd gltch-2.7m/hive
 pip install websockets
 python server.py
@@ -167,7 +167,7 @@ Dashboard: `http://YOUR_VPS_IP:8080`
 ### Step 2: Connect Peers (on GPU machines)
 
 ```bash
-git clone https://github.com/cyberdreadx/gltch-2.7m.git
+git clone https://github.com/cyberdreadx/gltch-llm.git
 cd gltch-2.7m
 pip install torch websockets requests
 

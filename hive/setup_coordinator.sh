@@ -2,7 +2,7 @@
 # GLTCH Hive Coordinator - VPS Setup Script
 # Run this on your Hostinger VPS
 #
-# Usage: curl -sSL https://raw.githubusercontent.com/cyberdreadx/gltch-2.7m/main/hive/setup_coordinator.sh | bash
+# Usage: curl -sSL https://raw.githubusercontent.com/cyberdreadx/gltch-llm/main/hive/setup_coordinator.sh | bash
 
 set -e
 
@@ -33,10 +33,10 @@ pip install websockets
 
 # Download server files
 echo "📥 Downloading coordinator..."
-curl -sSL https://raw.githubusercontent.com/cyberdreadx/gltch-2.7m/main/hive/server.py -o server.py
-curl -sSL https://raw.githubusercontent.com/cyberdreadx/gltch-2.7m/main/hive/index.html -o index.html
-curl -sSL https://raw.githubusercontent.com/cyberdreadx/gltch-2.7m/main/hive/style.css -o style.css
-curl -sSL https://raw.githubusercontent.com/cyberdreadx/gltch-2.7m/main/hive/hive.js -o hive.js
+curl -sSL https://raw.githubusercontent.com/cyberdreadx/gltch-llm/main/hive/server.py -o server.py
+curl -sSL https://raw.githubusercontent.com/cyberdreadx/gltch-llm/main/hive/index.html -o index.html
+curl -sSL https://raw.githubusercontent.com/cyberdreadx/gltch-llm/main/hive/style.css -o style.css
+curl -sSL https://raw.githubusercontent.com/cyberdreadx/gltch-llm/main/hive/hive.js -o hive.js
 
 # Create systemd service
 echo "🔧 Creating systemd service..."

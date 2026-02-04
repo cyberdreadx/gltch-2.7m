@@ -63,12 +63,12 @@ echo "📁 Working directory: $WORK_DIR"
 # Check if git is available
 if command -v git &> /dev/null; then
     echo "📥 Cloning GLTCH..."
-    git clone --depth 1 https://github.com/cyberdreadx/gltch-2.7m.git .
+    git clone --depth 1 https://github.com/cyberdreadx/gltch-llm.git .
 else
     echo "📥 Downloading GLTCH..."
-    curl -sSL https://github.com/cyberdreadx/gltch-2.7m/archive/main.zip -o gltch.zip
+    curl -sSL https://github.com/cyberdreadx/gltch-llm/archive/main.zip -o gltch.zip
     unzip -q gltch.zip
-    mv gltch-2.7m-main/* .
+    mv gltch-llm-main/* .
 fi
 
 # Create virtual environment
