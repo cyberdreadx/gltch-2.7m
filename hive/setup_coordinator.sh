@@ -12,11 +12,10 @@ echo "║   Created by: cyberdreadx                                             
 echo "╚═══════════════════════════════════════════════════════════════════════════════╝"
 echo ""
 
-# Install Python if needed
-if ! command -v python3 &> /dev/null; then
-    echo "📦 Installing Python..."
-    apt update && apt install -y python3 python3-pip python3-venv
-fi
+# Install Python and venv if needed
+echo "📦 Installing dependencies..."
+sudo apt update -qq
+sudo apt install -y python3 python3-pip python3-venv
 
 # Create directory
 echo "📁 Setting up GLTCH Hive..."
