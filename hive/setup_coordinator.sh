@@ -12,15 +12,19 @@ echo "║   Created by: cyberdreadx                                             
 echo "╚═══════════════════════════════════════════════════════════════════════════════╝"
 echo ""
 
-# Install Python and venv if needed
+# Install Python and venv
 echo "📦 Installing dependencies..."
 sudo apt update -qq
-sudo apt install -y python3 python3-pip python3-venv
+PYTHON_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+sudo apt install -y python3 python3-pip python3-venv python${PYTHON_VER}-venv || sudo apt install -y python3-venv
 
 # Create directory
 echo "📁 Setting up GLTCH Hive..."
 mkdir -p ~/gltch-hive
 cd ~/gltch-hive
+
+# Remove old venv if exists
+rm -rf venv
 
 # Create virtual environment
 python3 -m venv venv
