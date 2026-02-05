@@ -6,12 +6,19 @@ Run this script to join the training hive and contribute GPU power.
 Usage:
     python peer.py --server ws://YOUR_VPS:8765 --key SECRET --name my-gpu
     python peer.py --server ws://YOUR_VPS:8765 --key SECRET --name my-gpu --size 10m
+    python peer.py --server ws://YOUR_VPS:8765 --key SECRET --size 100m --fp16
 
 Model Sizes:
     2.7m  - 2.7M params (default)
     10m   - ~10M params
     25m   - ~25M params  
     50m   - ~50M params
+    100m  - ~100M params (requires --fp16)
+    200m  - ~200M params (requires --fp16 and --gradient-checkpointing)
+
+Memory Optimizations:
+    --fp16                    Use mixed precision (float16) for 2x memory savings
+    --gradient-checkpointing  Trade memory for compute - enables larger models
 
 Created by: cyberdreadx
 """
@@ -35,6 +42,8 @@ try:
     import torch
     import torch.nn as nn
     import torch.nn.functional as F
+    from torch.cuda.amp import autocast, GradScaler
+    from torch.utils.checkpoint import checkpoint
     HAS_TORCH = True
 except ImportError:
     HAS_TORCH = False
@@ -100,6 +109,28 @@ CONFIGS = {
         'dropout': 0.1,
         'learning_rate': 6e-5,
         'max_iters': 10000,
+    },
+    '100m': {
+        'name': 'GLTCH-100M',
+        'batch_size': 16,
+        'block_size': 512,
+        'n_embd': 1024,
+        'n_head': 16,
+        'n_layer': 16,
+        'dropout': 0.1,
+        'learning_rate': 3e-5,
+        'max_iters': 15000,
+    },
+    '200m': {
+        'name': 'GLTCH-200M',
+        'batch_size': 8,
+        'block_size': 512,
+        'n_embd': 1280,
+        'n_head': 20,
+        'n_layer': 24,
+        'dropout': 0.1,
+        'learning_rate': 1.5e-5,
+        'max_iters': 20000,
     },
 }
 
@@ -191,19 +222,28 @@ class TransformerBlock(nn.Module):
 
 
 class GLTCH(nn.Module):
-    def __init__(self, vocab_size):
+    def __init__(self, vocab_size, use_checkpointing=False):
         super().__init__()
         self.vocab_size = vocab_size
+        self.use_checkpointing = use_checkpointing
         self.token_embedding = nn.Embedding(vocab_size, config['n_embd'])
         self.position_embedding = nn.Embedding(config['block_size'], config['n_embd'])
-        self.blocks = nn.Sequential(*[TransformerBlock() for _ in range(config['n_layer'])])
+        self.blocks = nn.ModuleList([TransformerBlock() for _ in range(config['n_layer'])])
         self.ln_f = nn.LayerNorm(config['n_embd'])
         self.lm_head = nn.Linear(config['n_embd'], vocab_size)
     
     def forward(self, idx, targets=None):
         B, T = idx.shape
         x = self.token_embedding(idx) + self.position_embedding(torch.arange(T, device=idx.device))
-        logits = self.lm_head(self.ln_f(self.blocks(x)))
+        
+        # Apply transformer blocks with optional gradient checkpointing
+        for block in self.blocks:
+            if self.use_checkpointing and self.training:
+                x = checkpoint(block, x, use_reentrant=False)
+            else:
+                x = block(x)
+        
+        logits = self.lm_head(self.ln_f(x))
         loss = F.cross_entropy(logits.view(-1, self.vocab_size), targets.view(-1)) if targets is not None else None
         return logits, loss
     
@@ -222,7 +262,7 @@ class GLTCH(nn.Module):
 # ============================================
 
 class TrainingPeer:
-    def __init__(self, server_url: str, name: str, size: str, secret_key: str):
+    def __init__(self, server_url: str, name: str, size: str, secret_key: str, use_fp16: bool = False, use_checkpointing: bool = False):
         global config
         config = CONFIGS[size].copy()
         config['device'] = get_device()
@@ -231,12 +271,17 @@ class TrainingPeer:
         self.name = name
         self.size = size
         self.secret_key = secret_key
+        self.use_fp16 = use_fp16
+        self.use_checkpointing = use_checkpointing
         self.gpu = get_gpu_info()
         self.device = get_device()
         self.peer_id = None
         self.ws = None
         self.running = True
         self.step = 0
+        
+        # Mixed precision scaler
+        self.scaler = GradScaler() if use_fp16 and self.device and str(self.device) == 'cuda' else None
         
         # Load training data
         self.data = None
@@ -481,12 +526,20 @@ def main():
     parser.add_argument("--server", default="ws://localhost:8765", help="Server WebSocket URL")
     parser.add_argument("--key", required=True, help="Secret key from coordinator")
     parser.add_argument("--name", default=f"node-{random.randint(1000, 9999)}", help="Peer name")
-    parser.add_argument("--size", choices=['2.7m', '10m', '25m', '50m'], default='2.7m',
+    parser.add_argument("--size", choices=['1m', '2.7m', '10m', '25m', '50m', '100m', '200m'], default='2.7m',
                         help="Model size to train (default: 2.7m)")
+    parser.add_argument("--fp16", action="store_true",
+                        help="Use mixed precision training (float16) for 2x memory savings")
+    parser.add_argument("--gradient-checkpointing", action="store_true",
+                        help="Enable gradient checkpointing to reduce memory (slower training)")
     
     args = parser.parse_args()
     
-    peer = TrainingPeer(args.server, args.name, args.size, args.key)
+    peer = TrainingPeer(
+        args.server, args.name, args.size, args.key,
+        use_fp16=args.fp16,
+        use_checkpointing=args.gradient_checkpointing
+    )
     asyncio.run(peer.run())
 
 
