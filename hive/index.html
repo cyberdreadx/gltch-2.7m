@@ -1,12 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GLTCH Hive — Distributed Training Network</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;600&display=swap"
+        rel="stylesheet">
 </head>
+
 <body>
     <div class="container">
         <!-- Header -->
@@ -16,9 +20,8 @@
                 <h1>GLTCH<span class="logo-sub">HIVE</span></h1>
             </div>
             <div class="header-right">
-                <a href="https://colab.research.google.com/github/cyberdreadx/gltch-llm/blob/main/gltch_hive_peer.ipynb" 
-                   target="_blank" 
-                   class="join-button">
+                <a href="https://colab.research.google.com/github/cyberdreadx/gltch-llm/blob/main/gltch_hive_peer.ipynb"
+                    target="_blank" class="join-button">
                     🐝 Join the Hive
                 </a>
                 <div class="status">
@@ -44,7 +47,7 @@
             <!-- Stats Panel -->
             <div class="stats-panel">
                 <h2>Network Stats</h2>
-                
+
                 <div class="stat-card">
                     <div class="stat-icon">👥</div>
                     <div class="stat-info">
@@ -90,6 +93,21 @@
                         <div class="no-peers">Waiting for peers to connect...</div>
                     </div>
                 </div>
+
+                <!-- Quick Start Help -->
+                <div class="help-panel">
+                    <h3>🚀 Quick Start</h3>
+                    <div class="help-content">
+                        <p>Join with Google Colab (free GPU):</p>
+                        <a href="https://colab.research.google.com/github/cyberdreadx/gltch-llm/blob/main/gltch_hive_peer.ipynb"
+                            target="_blank" class="colab-badge">
+                            <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab">
+                        </a>
+                        <p class="help-or">— or —</p>
+                        <code
+                            class="help-cmd">pip install torch websockets requests<br>python peer.py --server ws://76.13.121.10:8765</code>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -102,4 +120,5 @@
 
     <script src="hive.js"></script>
 </body>
+
 </html>
