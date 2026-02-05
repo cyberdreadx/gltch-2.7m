@@ -379,7 +379,11 @@ class HiveNetwork {
     }
 
     connect() {
-        const wsUrl = `ws://${window.location.hostname}:8765`;
+        // Use secure WebSocket on HTTPS, with /ws path for nginx proxy
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const port = window.location.protocol === 'https:' ? '' : ':8765';
+        const path = window.location.protocol === 'https:' ? '/ws' : '';
+        const wsUrl = `${protocol}//${window.location.hostname}${port}${path}`;
 
         try {
             this.ws = new WebSocket(wsUrl);
