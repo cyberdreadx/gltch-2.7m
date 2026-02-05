@@ -404,6 +404,82 @@
             margin-bottom: 2rem;
         }
 
+        /* How It Works */
+        .how-it-works {
+            padding: 4rem 0;
+        }
+
+        .how-it-works h2 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2rem;
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .how-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .how-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 1.5rem;
+            background: var(--bg-card);
+            border-radius: 1rem;
+            border: 1px solid rgba(0, 245, 255, 0.1);
+            transition: all 0.3s;
+        }
+
+        .how-step:hover {
+            border-color: var(--cyan);
+            transform: translateY(-4px);
+        }
+
+        .step-num {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--cyan);
+            background: rgba(0, 245, 255, 0.1);
+            width: 45px;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .step-content h3 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+            color: var(--text);
+        }
+
+        .step-content p {
+            color: var(--text-dim);
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .speedup-info {
+            text-align: center;
+            padding: 1.5rem;
+            background: linear-gradient(135deg, rgba(0, 245, 255, 0.1), rgba(191, 0, 255, 0.1));
+            border-radius: 1rem;
+            border: 1px solid rgba(0, 245, 255, 0.2);
+        }
+
+        .speedup-info p {
+            font-size: 1.1rem;
+            color: var(--text);
+        }
+
         /* Footer */
         footer {
             border-top: 1px solid rgba(0, 245, 255, 0.1);
@@ -572,6 +648,44 @@
                     <div class="model-params">50M</div>
                     <div class="model-meta">~1 hour on GPU<br>Best quality</div>
                 </div>
+            </div>
+        </section>
+
+        <section class="how-it-works" id="how">
+            <h2>How Distributed Training Works</h2>
+            <div class="how-grid">
+                <div class="how-step">
+                    <div class="step-num">1</div>
+                    <div class="step-content">
+                        <h3>Train Locally</h3>
+                        <p>Each peer trains the model on their own GPU/CPU</p>
+                    </div>
+                </div>
+                <div class="how-step">
+                    <div class="step-num">2</div>
+                    <div class="step-content">
+                        <h3>Share Gradients</h3>
+                        <p>Send learning updates to the coordinator</p>
+                    </div>
+                </div>
+                <div class="how-step">
+                    <div class="step-num">3</div>
+                    <div class="step-content">
+                        <h3>Average & Sync</h3>
+                        <p>Coordinator combines gradients from all peers</p>
+                    </div>
+                </div>
+                <div class="how-step">
+                    <div class="step-num">4</div>
+                    <div class="step-content">
+                        <h3>Everyone Improves</h3>
+                        <p>Updated model is broadcast back to all peers</p>
+                    </div>
+                </div>
+            </div>
+            <div class="speedup-info">
+                <p>🚀 <strong>More peers = faster training!</strong> Each GPU adds compute power.
+                    An RTX 4090 + Colab T4 together train ~10% faster than alone.</p>
             </div>
         </section>
 

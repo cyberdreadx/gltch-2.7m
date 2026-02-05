@@ -182,6 +182,27 @@ Train across multiple machines using the Hive network.
 └───────────────┘    └───────────────┘    └───────────────┘
 ```
 
+### How It Works
+
+1. **Each peer trains independently** on their own device
+2. **Peers compute gradients** (how to adjust the model)
+3. **Gradients are sent to the coordinator**
+4. **Coordinator averages all gradients** from every peer
+5. **Updated weights are broadcast** back to everyone
+6. **Repeat** — all peers stay perfectly in sync
+
+### Why Is It Faster?
+
+More peers = more gradient samples per training step = **faster convergence**.
+
+| Peers | Combined Compute | Speedup |
+|-------|------------------|---------|
+| 1× RTX 4090 | 83 TFLOPS | 1× |
+| + 1× Colab T4 | 91 TFLOPS | ~1.1× |
+| + 2× more GPUs | 150+ TFLOPS | ~1.8× |
+
+The model trains faster because you're effectively processing more data in parallel. This is called **data-parallel distributed training**.
+
 ### Join as a Peer
 
 **Easiest**: Use Google Colab (click badge above)
