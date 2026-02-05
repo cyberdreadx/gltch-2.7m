@@ -6,8 +6,13 @@ Web-based UI for monitoring training progress in real-time.
 Usage:
     python train_with_ui.py                 # Train GLTCH-2.7M (default)
     python train_with_ui.py --size 10m      # Train GLTCH-10M
-    python train_with_ui.py --size 25m      # Train GLTCH-25M
     python train_with_ui.py --size 50m      # Train GLTCH-50M
+    python train_with_ui.py --size 100m --fp16  # Train GLTCH-100M with half precision
+    python train_with_ui.py --size 200m --fp16 --gradient-checkpointing  # Max size
+
+Memory Optimizations:
+    --fp16                    Use mixed precision (float16) - 2x memory savings
+    --gradient-checkpointing  Trade memory for compute - enables larger models
 
 Opens a browser dashboard showing:
 - Live loss curve
@@ -35,6 +40,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import requests
+from torch.cuda.amp import autocast, GradScaler
+from torch.utils.checkpoint import checkpoint
 
 # Global state for UI updates
 training_state = {
@@ -117,6 +124,32 @@ CONFIGS = {
         'eval_interval': 500,
         'sample_interval': 1000,
     },
+    '100m': {
+        'name': 'GLTCH-100M',
+        'batch_size': 16,
+        'block_size': 512,
+        'n_embd': 1024,
+        'n_head': 16,
+        'n_layer': 16,
+        'dropout': 0.1,
+        'learning_rate': 3e-5,
+        'max_iters': 15000,
+        'eval_interval': 500,
+        'sample_interval': 1000,
+    },
+    '200m': {
+        'name': 'GLTCH-200M',
+        'batch_size': 8,
+        'block_size': 512,
+        'n_embd': 1280,
+        'n_head': 20,
+        'n_layer': 24,
+        'dropout': 0.1,
+        'learning_rate': 1.5e-5,
+        'max_iters': 20000,
+        'eval_interval': 500,
+        'sample_interval': 1000,
+    },
 }
 
 # Will be set based on selected size
@@ -182,12 +215,13 @@ class TransformerBlock(nn.Module):
 
 
 class GLTCH(nn.Module):
-    def __init__(self, vocab_size):
+    def __init__(self, vocab_size, use_checkpointing=False):
         super().__init__()
         self.vocab_size = vocab_size
+        self.use_checkpointing = use_checkpointing
         self.token_embedding = nn.Embedding(vocab_size, config['n_embd'])
         self.position_embedding = nn.Embedding(config['block_size'], config['n_embd'])
-        self.blocks = nn.Sequential(*[TransformerBlock() for _ in range(config['n_layer'])])
+        self.blocks = nn.ModuleList([TransformerBlock() for _ in range(config['n_layer'])])
         self.ln_f = nn.LayerNorm(config['n_embd'])
         self.lm_head = nn.Linear(config['n_embd'], vocab_size)
     
@@ -195,7 +229,15 @@ class GLTCH(nn.Module):
         B, T = idx.shape
         tok_emb = self.token_embedding(idx)
         pos_emb = self.position_embedding(torch.arange(T, device=idx.device))
-        x = self.blocks(tok_emb + pos_emb)
+        x = tok_emb + pos_emb
+        
+        # Apply transformer blocks with optional gradient checkpointing
+        for block in self.blocks:
+            if self.use_checkpointing and self.training:
+                x = checkpoint(block, x, use_reentrant=False)
+            else:
+                x = block(x)
+        
         logits = self.lm_head(self.ln_f(x))
         
         loss = None
@@ -214,13 +256,15 @@ class GLTCH(nn.Module):
         return idx
 
 
-def train_model(data_path=None, resume_path=None, checkpoint_interval=500):
+def train_model(data_path=None, resume_path=None, checkpoint_interval=500, use_fp16=False, use_checkpointing=False):
     """Main training function that updates global state
     
     Args:
         data_path: Path to custom training data file (.txt), or None for Shakespeare
         resume_path: Path to checkpoint file to resume from, or None for fresh start
         checkpoint_interval: Save checkpoint every N steps
+        use_fp16: Enable mixed precision training (float16)
+        use_checkpointing: Enable gradient checkpointing to save memory
     """
     global training_state
     
@@ -285,8 +329,12 @@ def train_model(data_path=None, resume_path=None, checkpoint_interval=500):
     
     training_state["status"] = "Creating model..."
     
-    model = GLTCH(vocab_size).to(config['device'])
+    # Create model with optional gradient checkpointing
+    model = GLTCH(vocab_size, use_checkpointing=use_checkpointing).to(config['device'])
     optimizer = torch.optim.AdamW(model.parameters(), lr=config['learning_rate'])
+    
+    # Setup mixed precision training
+    scaler = GradScaler() if use_fp16 and config['device'] == 'cuda' else None
     
     # Load model/optimizer state if resuming
     if model_state:
@@ -309,13 +357,23 @@ def train_model(data_path=None, resume_path=None, checkpoint_interval=500):
         if not training_state["running"]:
             break
         
-        # Training step
+        # Training step with optional mixed precision
         xb, yb = get_batch('train')
-        logits, loss = model(xb, yb)
         
-        optimizer.zero_grad(set_to_none=True)
-        loss.backward()
-        optimizer.step()
+        if scaler is not None:
+            # Mixed precision training
+            with autocast(device_type='cuda'):
+                logits, loss = model(xb, yb)
+            optimizer.zero_grad(set_to_none=True)
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            # Regular precision training
+            logits, loss = model(xb, yb)
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward()
+            optimizer.step()
         
         # Update stats
         tokens_processed += config['batch_size'] * config['block_size']
@@ -726,7 +784,7 @@ def start_server(port=8888):
 if __name__ == "__main__":
     # Parse arguments
     parser = argparse.ArgumentParser(description="GLTCH Training Dashboard")
-    parser.add_argument("--size", choices=['2.7m', '10m', '25m', '50m'], default='2.7m',
+    parser.add_argument("--size", choices=['1m', '2.7m', '10m', '25m', '50m', '100m', '200m'], default='2.7m',
                         help="Model size to train (default: 2.7m)")
     parser.add_argument("--data", type=str, default=None,
                         help="Path to custom training data file (.txt)")
@@ -734,6 +792,10 @@ if __name__ == "__main__":
                         help="Path to checkpoint file to resume training from")
     parser.add_argument("--checkpoint-interval", type=int, default=500,
                         help="Save checkpoint every N steps (default: 500)")
+    parser.add_argument("--fp16", action="store_true",
+                        help="Use mixed precision training (float16) for 2x memory savings")
+    parser.add_argument("--gradient-checkpointing", action="store_true",
+                        help="Enable gradient checkpointing to reduce memory (slower training)")
     args = parser.parse_args()
     
     # Set config based on size
@@ -758,6 +820,10 @@ if __name__ == "__main__":
     print(f"📐 Config: {config['n_layer']} layers, {config['n_head']} heads, {config['n_embd']} dim")
     print(f"📦 Batch: {config['batch_size']}, Context: {config['block_size']}")
     print(f"🚀 Device: {config['device']}")
+    if args.fp16:
+        print(f"⚡ Mixed Precision: ENABLED (fp16)")
+    if args.gradient_checkpointing:
+        print(f"💾 Gradient Checkpointing: ENABLED")
     if args.data:
         print(f"📄 Data: {args.data}")
     if args.resume:
@@ -777,7 +843,9 @@ if __name__ == "__main__":
         train_model(
             data_path=args.data,
             resume_path=args.resume,
-            checkpoint_interval=args.checkpoint_interval
+            checkpoint_interval=args.checkpoint_interval,
+            use_fp16=args.fp16,
+            use_checkpointing=args.gradient_checkpointing
         )
     except KeyboardInterrupt:
         print("\n👋 Training stopped by user")
